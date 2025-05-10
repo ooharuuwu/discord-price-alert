@@ -18,8 +18,8 @@ load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-CRYPTO_INTERVAL = 5      # seconds
-OTHER_INTERVAL  = 30     # seconds
+CRYPTO_INTERVAL = 5     
+OTHER_INTERVAL  = 30    
 BINANCE_BATCH   = "https://api.binance.com/api/v3/ticker/price"
 
 
@@ -40,7 +40,6 @@ user_index_cache: dict[int, dict[str, int]] = {}
 def fetch_crypto_batch(symbols):
     if not symbols:
         return {}
-    # compact JSON (no spaces after commas)
     payload = json.dumps(symbols, separators=(",", ""))
     resp = requests.get(
         "https://api.binance.com/api/v3/ticker/price",
@@ -96,7 +95,6 @@ async def price_loop():
     # DEBUG
     logging.info(f"Running price_loop — {len(crypto)} crypto, {len(other)} other symbols")
 
-    # --- Crypto refresh ---
     if crypto:
         prices = fetch_crypto_batch(list(crypto))
         ts = time.time()
@@ -104,7 +102,6 @@ async def price_loop():
             price_cache[k] = (v, ts)
             logging.debug(f"Cached crypto {k} @ {v}")
 
-    # --- Stocks/commodities every OTHER_INTERVAL ---
     if time.time() - last_other_fetch >= OTHER_INTERVAL:
         for sym in other:
             try:
@@ -115,7 +112,6 @@ async def price_loop():
                 logging.warning("yfinance fail %s: %s", sym, e)
         last_other_fetch = time.time()
 
-    # --- Evaluate all alerts ---
     for aid, uid, asset, target, direction in alerts:
         price, ts = price_cache.get(asset, (None, None))
         logging.debug(f"[Eval] Alert {aid} → {asset} @ {price}, target={target}, dir={direction}")
@@ -150,7 +146,6 @@ class ConfirmView(discord.ui.View):
     async def confirm(self, i: discord.Interaction, _):
         insert_alert(i.user.id, self.asset, self.price, self.direction)
         
-        # Build a confirmation embed with alert details
         em = Embed(title="✅ Alert Set!", color=discord.Color.green())
         em.description = (
             f"**Ticker** — {self.asset}\n"
@@ -161,7 +156,6 @@ class ConfirmView(discord.ui.View):
             text="✨ Alerts fire via DMs"
         )
 
-        # Edit the original message to include the embed and remove buttons
         await i.response.edit_message(content=None, embed=em, view=None)
         
         message = i.message  # the edited confirmation message
@@ -170,12 +164,10 @@ class ConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def cancel(self, i: discord.Interaction, _):
-        # Build a cancellation embed
         em = Embed(title="❌ Cancelled", color=discord.Color.red())
-        # Edit the original message to include the embed and remove buttons
         await i.response.edit_message(content=None, embed=em, view=None)
 
-        message = i.message  # the edited cancellation message
+        message = i.message  
         await message.add_reaction("🗑️")
         deletable_confirmations.add(message.id)
 
@@ -195,7 +187,7 @@ async def on_message(msg):
         clean_text = re.sub(pattern, "", msg.content).strip()
 
         if not clean_text:
-            rows = get_active_alerts(str(msg.author.id))  # user‑only fetch
+            rows = get_active_alerts(str(msg.author.id)) 
             em = Embed(title="📋 Your Active Alerts", color=discord.Color.purple())
             if not rows:
                 em.description = "You have no active alerts."
@@ -206,7 +198,6 @@ async def on_message(msg):
                 for idx, (aid, asset, tgt, direction) in enumerate(rows, start=1):
                     mapping[str(idx)] = aid
 
-                    # Get current price from cache; fetch on‑demand if missing
                     cur_price = price_cache.get(asset, (None,))[0]
                     if cur_price is None:
                         try:
@@ -227,10 +218,8 @@ async def on_message(msg):
                         f"     [TradingView]({tv_url}) • [Hyperliquid]({hl_url})"
                     )
                 
-                # Join entries with a blank line for readability
                 em.description = "\n\n".join(lines)
                 
-                # Add an empty field for extra spacing before the footer
                 em.add_field(name="\u200b", value="\u200b", inline=False)
                 
                 em.set_footer(
@@ -239,21 +228,17 @@ async def on_message(msg):
                  "✨ Remove an alert: type `remove N`, `rm N`, or `delete N`"
         )
                 
-                # Cache the index→alert-id mapping for deletion
                 user_index_cache[msg.author.id] = mapping
-                # Expire the mapping after 5 minutes
                 asyncio.get_running_loop().call_later(
                     300,
                     lambda: user_index_cache.pop(msg.author.id, None)
                 )
-            # Send the embed and add a trash reaction for manual deletion
             sent_msg = await msg.channel.send(embed=em)
             await sent_msg.add_reaction("🗑️")
             deletable_confirmations.add(sent_msg.id)
             return
 
         if clean_text.lower().startswith(("remove", "rm", "delete", "del")):
-            # Grab every number (index) the user typed: supports "remove 1,2" or "remove 1 and 3"
             indices = re.findall(r"\d+", clean_text)
             if not indices:
                 return await msg.channel.send("❌ Provide at least one index to remove, e.g. `remove 2`.")
@@ -267,11 +252,10 @@ async def on_message(msg):
                 aid = mapping.get(idx)
                 if aid:
                     delete_alert(aid, str(msg.author.id))
-                    mapping.pop(idx, None)           # prevent double delete
+                    mapping.pop(idx, None)          
                     deleted.append(idx)
             
             if deleted:
-                # Send confirmation and auto‑delete it after 3 s
                 deletion_msg = await msg.channel.send(f"🗑️  Deleted alert(s): {', '.join(deleted)}")
 
                 async def _del_after_delay(m):
@@ -304,10 +288,8 @@ async def on_message(msg):
 
 @bot.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
-    # ignore bot reactions
     if user.bot:
         return
-    # only respond to trash emoji on our confirmation messages
     if reaction.emoji == "🗑️" and reaction.message.id in deletable_confirmations:
         try:
             await reaction.message.delete()
