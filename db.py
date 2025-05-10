@@ -54,3 +54,14 @@ def mark_triggered(alert_id):
     )
     conn.commit()
     conn.close()
+
+
+def delete_alert(alert_id, user_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM alerts WHERE id=? AND user_id=?", 
+        (alert_id, user_id)
+    )
+    conn.commit()
+    conn.close()
